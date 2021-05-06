@@ -40,6 +40,7 @@
 #include "xf86DDC.h"
 
 #include <xf86drm.h>
+#include <libdrm/drm_fourcc.h>
 #include "xf86Crtc.h"
 #include "drmmode_display.h"
 
@@ -319,20 +320,41 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	drmModeModeInfo kmode;
 	int height;
 
+	uint32_t pixelFormat = DRM_FORMAT_ARGB8888;
+	uint32_t handles[4];
+	uint32_t pitches[4];
+	uint32_t offsets[4];
+	uint64_t modifiers[4];
+
+	memset(handles, 0, sizeof(uint32_t)*4);
+	memset(pitches, 0, sizeof(uint32_t)*4);
+	memset(offsets, 0, sizeof(uint32_t)*4);
+	memset(modifiers, 0, sizeof(uint64_t)*4);	
+
+	handles[0] = drmmode->front_bo->handle;
+	pitches[0] = drmmode->front_bo->pitch;
+	modifiers[0] = DRM_FORMAT_MOD_LINEAR;
+
 	height = pScrn->virtualY;
 
 	if (drmmode->fb_id == 0) {
-		ret = drmModeAddFB(drmmode->fd,
+		/*ret = drmModeAddFB(drmmode->fd,
 				   pScrn->virtualX, height,
                                    pScrn->depth, pScrn->bitsPerPixel,
 				   drmmode->front_bo->pitch,
 				   drmmode->front_bo->handle,
-                                   &drmmode->fb_id);
-                if (ret < 0) {
-                        ErrorF("failed to add fb %d\n", ret);
-                        return FALSE;
-                }
-        }
+                                   &drmmode->fb_id);*/
+		ret = drmModeAddFB2WithModifiers(drmmode->fd,
+					pScrn->virtualX, pScrn->virtualY,
+					pixelFormat,
+					handles, pitches, offsets, modifiers,
+					&drmmode->fb_id, 0);
+
+		if (ret < 0) {
+				ErrorF("failed to add fb %d\n", ret);
+				return FALSE;
+		}
+    }
 
 	saved_mode = crtc->mode;
 	saved_x = crtc->x;
@@ -1152,6 +1174,12 @@ drmmode_xf86crtc_resize (ScrnInfoPtr scrn, int width, int height)
 	PixmapPtr ppix = screen->GetScreenPixmap(screen);
 	void *new_pixels;
 
+	uint32_t pixelFormat = DRM_FORMAT_ARGB8888;
+	uint32_t handles[4];
+	uint32_t pitches[4];
+	uint32_t offsets[4];
+	uint64_t modifiers[4];
+
 	if (scrn->virtualX == width && scrn->virtualY == height)
 		return TRUE;
 
@@ -1175,10 +1203,25 @@ drmmode_xf86crtc_resize (ScrnInfoPtr scrn, int width, int height)
 	scrn->virtualY = height;
 	scrn->displayWidth = pitch / cpp;
 
-	ret = drmModeAddFB(drmmode->fd, width, height, scrn->depth,
+	/*ret = drmModeAddFB(drmmode->fd, width, height, scrn->depth,
 			   scrn->bitsPerPixel, pitch,
 			   drmmode->front_bo->handle,
-			   &drmmode->fb_id);
+			   &drmmode->fb_id);*/
+
+	memset(handles, 0, sizeof(uint32_t)*4);
+	memset(pitches, 0, sizeof(uint32_t)*4);
+	memset(offsets, 0, sizeof(uint32_t)*4);
+	memset(modifiers, 0, sizeof(uint64_t)*4);	
+
+	handles[0] = drmmode->front_bo->handle;
+	pitches[0] = drmmode->front_bo->pitch;
+	modifiers[0] = DRM_FORMAT_MOD_LINEAR;
+	ret = drmModeAddFB2WithModifiers(drmmode->fd,
+			width, height,
+			pixelFormat,
+			handles, pitches, offsets, modifiers,
+			&drmmode->fb_id, 0);
+
 	if (ret)
 		goto fail;
 	
